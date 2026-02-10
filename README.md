@@ -1,4 +1,4 @@
-# audio-pipeline (aggressive loudness build)
+# audio-pipeline (profile + config driven)
 
 Single-command, resume-safe pipeline for:
 
@@ -6,10 +6,7 @@ Single-command, resume-safe pipeline for:
 2) Transcribing with faster-whisper (CPU-friendly with INT8)  
 3) Optional token-free diarization (speaker labels) using VAD + embeddings + clustering  
 
-This build is tuned to be **more aggressive on volume**:
-- Compressor: threshold -20 dB, ratio 4:1, makeup +12 dB
-- Loudness target: -12 LUFS
-- True peak cap: -1.0 dB
+The pipeline now resolves a single configuration object from profile + optional config file + CLI overrides.
 
 ## Requirements
 - Linux
@@ -29,32 +26,66 @@ Optional diarization (no token required):
 pip install -e ".[diarization]"
 ```
 
-## Run
-Enhance + Transcribe (recommended defaults for Intel CPU):
+## Profiles
+- `aggressive` (default; matches existing behavior closest)
+- `balanced`
+- `gentle`
+
+## Run examples
+Use aggressive profile:
 ```bash
-audio-pipeline run /path/to/input_audio /path/to/output_root \
-  --model medium --device cpu --compute-type int8 --vad --beam-size 7 --make-asr-wav
+audio-pipeline run in_dir out_dir --profile aggressive
 ```
 
-Add diarization:
+Balanced profile with diarization disabled:
 ```bash
-audio-pipeline run /path/to/input_audio /path/to/output_root \
-  --model medium --device cpu --compute-type int8 --vad --beam-size 7 --make-asr-wav \
-  --diarize --max-speakers 6 --vad-aggr 2
+audio-pipeline run in_dir out_dir --profile balanced --no-diarize
 ```
 
-Outputs:
+Load config file (YAML or TOML):
+```bash
+audio-pipeline run in_dir out_dir --config examples/pipeline.yml
+```
+
+Dry-run to inspect resolved config and stages:
+```bash
+audio-pipeline run in_dir out_dir --dry-run
+```
+
+## Feature toggles
+Enable/disable stages cleanly:
+- `--no-enhance`
+- `--no-transcribe`
+- `--diarize` / `--no-diarize`
+- `--no-subtitles`
+- `--no-master-outputs`
+
+## Precedence rules
+Configuration resolution is (lowest to highest):
+1. base defaults
+2. selected profile (`--profile`)
+3. config file (`--config`)
+4. CLI flags
+
+CLI always wins.
+
+## Optional diarization dependencies
+Diarization dependencies are imported lazily only when diarization is enabled. If missing and diarization is requested, a clear error is emitted:
+
+> Diarization enabled but dependencies not installed. Install with: pip install -e '.[diarization]'
+
+## Outputs
 ```
 output_root/
-  enhanced/            # enhanced .m4a files
-  asr_wav/             # 16k mono wav used for ASR/diarization
-  transcripts/         # .txt .srt .vtt .json per file (+ speaker outputs if diarize)
+  enhanced/            # enhanced .m4a files (if enabled)
+  asr_wav/             # 16k mono wav used for ASR/diarization (if enabled)
+  transcripts/         # .txt .json and optional .srt/.vtt (+ speaker outputs if diarize)
   pipeline.log
-  master_transcripts.csv
-  master_transcript.txt
+  master_transcripts.csv      # if master outputs enabled
+  master_transcript.txt       # if master outputs enabled
 ```
 
 ## Notes
 - Originals are never modified.
-- If `loudnorm` is missing, it falls back to dynaudnorm (+ alimiter if available). The fallback is also loud.
-- If the result is too harsh/pumpy, edit `audio_pipeline/enhance.py` and reduce makeup to 10 or set loudnorm I=-13/-14.
+- If `loudnorm` is missing, it falls back to dynaudnorm (+ alimiter if available).
+- For less aggressive output, use `--profile balanced` or `--profile gentle`.
