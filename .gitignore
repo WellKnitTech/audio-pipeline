@@ -205,3 +205,26 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Audio / media
+*.m4a
+*.wav
+*.mp3
+*.flac
+*.aac
+*.ogg
+*.opus
+*.mp4
+*.mov
+
+# Pipeline outputs
+output*/
+enhanced/
+asr_wav/
+transcripts/
+pipeline.log
+master_transcript.txt
+master_transcripts.csv
+
+# OS
+.DS_Store

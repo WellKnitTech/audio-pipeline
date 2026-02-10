@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audio-pipeline"
+version = "0.2.0"
+description = "Safe batch audio enhancement + transcription (faster-whisper) + optional token-free diarization."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{name="WKT Toolkit"}]
+dependencies = [
+  "faster-whisper>=1.0.3",
+]
+
+[project.optional-dependencies]
+diarization = [
+  "numpy>=1.23",
+  "scipy>=1.9",
+  "scikit-learn>=1.2",
+  "soundfile>=0.12",
+  "webrtcvad>=2.0.10",
+  "resemblyzer>=0.1.4",
+]
+
+[project.scripts]
+audio-pipeline = "audio_pipeline.cli:main"
