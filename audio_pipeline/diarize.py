@@ -6,15 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
 
-try:
-    import numpy as np
-    import soundfile as sf
-    import webrtcvad
-    from resemblyzer import VoiceEncoder
-    from sklearn.cluster import AgglomerativeClustering
-    from sklearn.metrics import silhouette_score
-except Exception:
-    np = None  # type: ignore
 
 @dataclass
 class WhisperSeg:
@@ -22,14 +13,13 @@ class WhisperSeg:
     end: float
     text: str
 
+
 @dataclass
 class DiarSeg:
     start: float
     end: float
     spk: str
 
-def deps_available() -> bool:
-    return np is not None
 
 def read_whisper_json(path: Path) -> List[WhisperSeg]:
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -38,87 +28,6 @@ def read_whisper_json(path: Path) -> List[WhisperSeg]:
         segs.append(WhisperSeg(float(s["start"]), float(s["end"]), (s.get("text") or "").strip()))
     return [s for s in segs if s.text]
 
-def frame_generator(pcm16: "np.ndarray", sr: int, frame_ms: int) -> List["np.ndarray"]:
-    frame_len = int(sr * frame_ms / 1000)
-    frames = []
-    for i in range(0, len(pcm16) - frame_len + 1, frame_len):
-        frames.append(pcm16[i:i + frame_len])
-    return frames
-
-def vad_segments(wav_path: Path, aggressiveness: int = 2, frame_ms: int = 30,
-                 min_speech_ms: int = 400, min_silence_ms: int = 500) -> Tuple["np.ndarray", List[Tuple[float, float]]]:
-    audio, sr = sf.read(str(wav_path), dtype="int16")
-    if sr != 16000:
-        raise ValueError("Expected 16kHz wav for diarization.")
-    if getattr(audio, "ndim", 1) != 1:
-        audio = audio[:, 0]
-
-    vad = webrtcvad.Vad(aggressiveness)
-    frames = frame_generator(audio, sr, frame_ms)
-    is_speech = [vad.is_speech(f.tobytes(), sr) for f in frames]
-
-    frame_dur = frame_ms / 1000.0
-    segments = []
-    in_seg = False
-    seg_start = 0.0
-    silence = 0.0
-
-    for idx, sp in enumerate(is_speech):
-        t = idx * frame_dur
-        if sp:
-            if not in_seg:
-                in_seg = True
-                seg_start = t
-                silence = 0.0
-            else:
-                silence = 0.0
-        else:
-            if in_seg:
-                silence += frame_dur
-                if silence >= (min_silence_ms / 1000.0):
-                    segments.append((seg_start, t))
-                    in_seg = False
-                    silence = 0.0
-
-    if in_seg:
-        segments.append((seg_start, len(is_speech) * frame_dur))
-
-    merged = []
-    for s, e in segments:
-        if (e - s) < (min_speech_ms / 1000.0):
-            continue
-        if not merged:
-            merged.append([s, e]); continue
-        if s - merged[-1][1] <= 0.2:
-            merged[-1][1] = e
-        else:
-            merged.append([s, e])
-
-    audio_f32 = audio.astype("float32") / 32768.0
-    return audio_f32, [(float(a), float(b)) for a, b in merged]
-
-def slice_audio(audio_f32: "np.ndarray", sr: int, start: float, end: float) -> "np.ndarray":
-    a = max(0, int(start * sr))
-    b = min(len(audio_f32), int(end * sr))
-    return audio_f32[a:b]
-
-def choose_k(embs: "np.ndarray", k_min: int, k_max: int) -> int:
-    if len(embs) < 3:
-        return 1
-    best_k = 2
-    best_score = -1.0
-    for k in range(k_min, min(k_max, len(embs)) + 1):
-        try:
-            labels = AgglomerativeClustering(n_clusters=k, metric="cosine", linkage="average").fit_predict(embs)
-            if len(set(labels)) < 2:
-                continue
-            score = silhouette_score(embs, labels, metric="cosine")
-            if score > best_score:
-                best_score = score
-                best_k = k
-        except Exception:
-            continue
-    return best_k
 
 def diarize_and_merge(
     asr_wav16k: Path,
@@ -128,8 +37,104 @@ def diarize_and_merge(
     vad_aggr: int = 2,
     force: bool = False,
 ) -> Tuple[Path, Path, Path]:
-    if not deps_available():
-        raise RuntimeError("Diarization deps not installed. Run: pip install -e \".[diarization]\"")
+    try:
+        import numpy as np
+        import soundfile as sf
+        import webrtcvad
+        from resemblyzer import VoiceEncoder
+        from sklearn.cluster import AgglomerativeClustering
+        from sklearn.metrics import silhouette_score
+    except Exception as exc:
+        raise RuntimeError(
+            "Diarization enabled but dependencies not installed. Install with: pip install -e '.[diarization]'"
+        ) from exc
+
+    def frame_generator(pcm16: "np.ndarray", sr: int, frame_ms: int) -> List["np.ndarray"]:
+        frame_len = int(sr * frame_ms / 1000)
+        frames = []
+        for i in range(0, len(pcm16) - frame_len + 1, frame_len):
+            frames.append(pcm16[i:i + frame_len])
+        return frames
+
+    def vad_segments(
+        wav_path: Path,
+        aggressiveness: int = 2,
+        frame_ms: int = 30,
+        min_speech_ms: int = 400,
+        min_silence_ms: int = 500,
+    ) -> Tuple["np.ndarray", List[Tuple[float, float]]]:
+        audio, sr = sf.read(str(wav_path), dtype="int16")
+        if sr != 16000:
+            raise ValueError("Expected 16kHz wav for diarization.")
+        if getattr(audio, "ndim", 1) != 1:
+            audio = audio[:, 0]
+
+        vad = webrtcvad.Vad(aggressiveness)
+        frames = frame_generator(audio, sr, frame_ms)
+        is_speech = [vad.is_speech(f.tobytes(), sr) for f in frames]
+
+        frame_dur = frame_ms / 1000.0
+        segments = []
+        in_seg = False
+        seg_start = 0.0
+        silence = 0.0
+
+        for idx, sp in enumerate(is_speech):
+            t = idx * frame_dur
+            if sp:
+                if not in_seg:
+                    in_seg = True
+                    seg_start = t
+                    silence = 0.0
+                else:
+                    silence = 0.0
+            elif in_seg:
+                silence += frame_dur
+                if silence >= (min_silence_ms / 1000.0):
+                    segments.append((seg_start, t))
+                    in_seg = False
+                    silence = 0.0
+
+        if in_seg:
+            segments.append((seg_start, len(is_speech) * frame_dur))
+
+        merged = []
+        for s, e in segments:
+            if (e - s) < (min_speech_ms / 1000.0):
+                continue
+            if not merged:
+                merged.append([s, e])
+                continue
+            if s - merged[-1][1] <= 0.2:
+                merged[-1][1] = e
+            else:
+                merged.append([s, e])
+
+        audio_f32 = audio.astype("float32") / 32768.0
+        return audio_f32, [(float(a), float(b)) for a, b in merged]
+
+    def slice_audio(audio_f32: "np.ndarray", sr: int, start: float, end: float) -> "np.ndarray":
+        a = max(0, int(start * sr))
+        b = min(len(audio_f32), int(end * sr))
+        return audio_f32[a:b]
+
+    def choose_k(embs: "np.ndarray", k_min: int, k_max: int) -> int:
+        if len(embs) < 3:
+            return 1
+        best_k = 2
+        best_score = -1.0
+        for k in range(k_min, min(k_max, len(embs)) + 1):
+            try:
+                labels = AgglomerativeClustering(n_clusters=k, metric="cosine", linkage="average").fit_predict(embs)
+                if len(set(labels)) < 2:
+                    continue
+                score = silhouette_score(embs, labels, metric="cosine")
+                if score > best_score:
+                    best_score = score
+                    best_k = k
+            except Exception:
+                continue
+        return best_k
 
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = asr_wav16k.stem
@@ -166,17 +171,18 @@ def diarize_and_merge(
         n_clusters=k, metric="cosine", linkage="average"
     ).fit_predict(embs)
 
-    diar_segs = [DiarSeg(s, e, f"SPK{lab+1}") for (s, e), lab in zip(seg_times, labels)]
+    diar_segs = [DiarSeg(s, e, f"SPK{lab + 1}") for (s, e), lab in zip(seg_times, labels)]
     merged = []
     for ds in diar_segs:
-        if not merged: merged.append(ds); continue
+        if not merged:
+            merged.append(ds)
+            continue
         prev = merged[-1]
         if ds.spk == prev.spk and ds.start - prev.end <= 0.25:
             merged[-1] = DiarSeg(prev.start, ds.end, prev.spk)
         else:
             merged.append(ds)
 
-    # RTTM
     file_id = stem
     rttm_lines = []
     for ds in merged:

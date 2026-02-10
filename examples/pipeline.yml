@@ -1,0 +1,24 @@
+features:
+  enhance: true
+  make_asr_wav: true
+  transcribe: true
+  diarize: false
+  subtitles: true
+  master_outputs: true
+
+asr:
+  model: medium
+  device: cpu
+  compute_type: int8
+  beam_size: 5
+  language: null
+  vad: true
+  vad_min_silence_ms: 700
+  temperature: 0.0
+
+diarization:
+  max_speakers: 6
+  vad_aggr: 2
+
+mono: true
+force: false
