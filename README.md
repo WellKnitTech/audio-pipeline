@@ -86,6 +86,7 @@ output_root/
 ```
 
 ## Notes
+- The CLI now shows tqdm progress bars for total files and per-file stages in addition to log lines.
 - Originals are never modified.
 - If `loudnorm` is missing, it falls back to dynaudnorm (+ alimiter if available).
 - For less aggressive output, use `--profile balanced` or `--profile gentle`.
