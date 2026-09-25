@@ -66,9 +66,12 @@ audio-pipeline video-prepare /path/to/event.mp4 /path/to/work/event --chunk-seco
 The chunks can be transcribed with the existing pipeline, then merged onto the
 full video timeline:
 
+The run command writes transcript files beneath its output root's `transcripts/`
+subdirectory; pass that directory to the merge step:
+
 ```bash
-audio-pipeline run /path/to/work/event/audio /path/to/work/transcripts --no-enhance
-audio-pipeline video-merge /path/to/work/event/manifest.json /path/to/work/transcripts /path/to/work/event-transcript.json
+audio-pipeline run /path/to/work/event/audio /path/to/work/transcribe-run --no-enhance
+audio-pipeline video-merge /path/to/work/event/manifest.json /path/to/work/transcribe-run/transcripts /path/to/work/event-transcript.json
 ```
 
 `video-merge` requires one transcript JSON per chunk and writes global timestamps
