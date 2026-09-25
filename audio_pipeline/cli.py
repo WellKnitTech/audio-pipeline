@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
 from .config_loader import config_pretty_json, resolve_config
-from .pipeline import enabled_stage_names, run_pipeline
 from .profiles import PROFILES
+from .video import prepare_video
 
 
 def main() -> int:
@@ -46,9 +47,16 @@ def main() -> int:
 
     runp.add_argument("--verbose", action="store_true", help="Verbose logging")
 
+    preparep = sub.add_parser("video-prepare", help="Probe a video and extract bounded audio chunks")
+    preparep.add_argument("video_path", type=Path, help="Source video file (left unchanged)")
+    preparep.add_argument("output_dir", type=Path, help="New output directory for chunks and manifest")
+    preparep.add_argument("--chunk-seconds", type=int, default=600, help="Maximum audio chunk duration (default: 600)")
+
     args = ap.parse_args()
 
     if args.cmd == "run":
+        from .pipeline import enabled_stage_names, run_pipeline
+
         if not args.input_dir.is_dir():
             ap.error(f"input_dir is not a directory: {args.input_dir}")
 
@@ -113,6 +121,19 @@ def main() -> int:
         )
 
         logging.info("Done.")
+        return 0
+
+    if args.cmd == "video-prepare":
+        try:
+            manifest = prepare_video(args.video_path, args.output_dir, chunk_seconds=args.chunk_seconds)
+        except (FileNotFoundError, FileExistsError, ValueError, RuntimeError) as exc:
+            ap.error(str(exc))
+        print(json.dumps({
+            "output_dir": str(args.output_dir),
+            "duration_seconds": manifest["duration_seconds"],
+            "audio_chunks": len(manifest["chunks"]),
+            "manifest": str(args.output_dir / "manifest.json"),
+        }, indent=2))
         return 0
 
     return 2

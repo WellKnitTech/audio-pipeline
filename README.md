@@ -52,6 +52,25 @@ Dry-run to inspect resolved config and stages:
 audio-pipeline run in_dir out_dir --dry-run
 ```
 
+## Prepare a large video for transcription
+
+`video-prepare` probes a local video, leaves the source untouched, and extracts
+16 kHz mono PCM audio into bounded WAV chunks. The output directory must not
+already exist; a manifest records the source metadata and each chunk's offset.
+
+```bash
+audio-pipeline video-prepare /path/to/event.mp4 /path/to/work/event --chunk-seconds 600
+```
+
+The result contains `manifest.json` and `audio/chunk_XXXX.wav`. These chunks can
+then be passed to the existing `audio-pipeline run` command for transcription
+and optional diarization. Speaker labels and transcript timestamps are currently
+chunk-local; global timestamp adjustment, consistent speaker identities across
+chunks, highlight selection, and video clip rendering are follow-up work.
+
+Preparation writes only to a new output directory. If extraction fails, the
+temporary output is removed; reruns must use a new output directory.
+
 ## Feature toggles
 Enable/disable stages cleanly:
 - `--no-enhance`
