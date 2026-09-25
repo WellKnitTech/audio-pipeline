@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .config_loader import config_pretty_json, resolve_config
 from .profiles import PROFILES
-from .video import prepare_video
+from .video import merge_chunk_transcripts, prepare_video
 
 
 def main() -> int:
@@ -51,6 +51,11 @@ def main() -> int:
     preparep.add_argument("video_path", type=Path, help="Source video file (left unchanged)")
     preparep.add_argument("output_dir", type=Path, help="New output directory for chunks and manifest")
     preparep.add_argument("--chunk-seconds", type=int, default=600, help="Maximum audio chunk duration (default: 600)")
+
+    mergep = sub.add_parser("video-merge", help="Rebase chunk transcripts onto the full video timeline")
+    mergep.add_argument("manifest", type=Path, help="video-prepare manifest.json")
+    mergep.add_argument("transcript_dir", type=Path, help="Directory containing per-chunk transcript JSON files")
+    mergep.add_argument("output_json", type=Path, help="New output JSON path for the merged transcript")
 
     args = ap.parse_args()
 
@@ -133,6 +138,18 @@ def main() -> int:
             "duration_seconds": manifest["duration_seconds"],
             "audio_chunks": len(manifest["chunks"]),
             "manifest": str(args.output_dir / "manifest.json"),
+        }, indent=2))
+        return 0
+
+    if args.cmd == "video-merge":
+        try:
+            result = merge_chunk_transcripts(args.manifest, args.transcript_dir, args.output_json)
+        except (FileNotFoundError, FileExistsError, ValueError, OSError) as exc:
+            ap.error(str(exc))
+        print(json.dumps({
+            "output_json": str(args.output_json),
+            "chunks": result["meta"]["chunk_count"],
+            "segments": len(result["segments"]),
         }, indent=2))
         return 0
 

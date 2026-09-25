@@ -63,14 +63,21 @@ audio/video stream start-time difference.
 audio-pipeline video-prepare /path/to/event.mp4 /path/to/work/event --chunk-seconds 600
 ```
 
-The result contains `manifest.json` and `audio/chunk_XXXX.wav`. These chunks can
-then be passed to the existing `audio-pipeline run` command for transcription
-and optional diarization. Speaker labels and transcript timestamps are currently
-chunk-local; global timestamp adjustment, consistent speaker identities across
-chunks, highlight selection, and video clip rendering are follow-up work.
+The chunks can be transcribed with the existing pipeline, then merged onto the
+full video timeline:
 
-Preparation writes only to a new output directory. If extraction fails, the
-temporary output is removed; reruns must use a new output directory.
+```bash
+audio-pipeline run /path/to/work/event/audio /path/to/work/transcripts --no-enhance
+audio-pipeline video-merge /path/to/work/event/manifest.json /path/to/work/transcripts /path/to/work/event-transcript.json
+```
+
+`video-merge` requires one transcript JSON per chunk and writes global timestamps
+plus chunk provenance. It accepts the transcript naming used by regular and
+ASR-WAV runs. Speaker identities are not yet reconciled across chunks; highlight
+selection and video clip rendering remain follow-up work.
+
+Preparation and merging leave source inputs untouched and refuse to overwrite
+outputs.
 
 ## Feature toggles
 Enable/disable stages cleanly:
