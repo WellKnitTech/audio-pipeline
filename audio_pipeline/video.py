@@ -125,3 +125,85 @@ def prepare_video(video_path: Path, output_dir: Path, chunk_seconds: int = 600) 
         shutil.rmtree(temporary_dir, ignore_errors=True)
         if output_created and not committed:
             shutil.rmtree(output_dir, ignore_errors=True)
+
+
+def merge_chunk_transcripts(manifest_path: Path, transcript_dir: Path, output_path: Path) -> Dict[str, Any]:
+    if output_path.exists():
+        raise FileExistsError(f"Output file already exists; refusing to overwrite: {output_path}")
+    if not transcript_dir.is_dir():
+        raise FileNotFoundError(f"Transcript directory not found: {transcript_dir}")
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    chunks = manifest.get("chunks") if isinstance(manifest, dict) else None
+    if not isinstance(chunks, list) or not chunks:
+        raise ValueError("Manifest must contain a non-empty chunks list")
+
+    segments: List[Dict[str, Any]] = []
+    sources = []
+    for chunk in chunks:
+        if not isinstance(chunk, dict) or not chunk.get("file"):
+            raise ValueError("Each manifest chunk must include a file path")
+        chunk_name = Path(str(chunk["file"])).name
+        chunk_stem = Path(chunk_name).stem
+        try:
+            offset = float(chunk["start_seconds"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Chunk {chunk_name} is missing a valid start_seconds offset") from exc
+        if not math.isfinite(offset):
+            raise ValueError(f"Chunk {chunk_name} has a non-finite start_seconds offset")
+
+        candidates = [
+            transcript_dir / f"{chunk_stem}.json",
+            transcript_dir / f"{chunk_stem}.asr16k.json",
+            transcript_dir / f"{chunk_stem}.enhanced.json",
+            transcript_dir / f"{chunk_stem}.enhanced.asr16k.json",
+        ]
+        available = [path for path in candidates if path.is_file()]
+        if not available:
+            raise FileNotFoundError(f"No transcript JSON found for chunk {chunk_name} in {transcript_dir}")
+        if len(available) > 1:
+            raise ValueError(f"Multiple transcript JSON files found for chunk {chunk_name}: {available}")
+        transcript_path = available[0]
+        transcript = json.loads(transcript_path.read_text(encoding="utf-8"))
+        local_segments = transcript.get("segments") if isinstance(transcript, dict) else None
+        if not isinstance(local_segments, list):
+            raise ValueError(f"Transcript must contain a segments list: {transcript_path}")
+
+        for index, segment in enumerate(local_segments):
+            try:
+                start = float(segment["start"])
+                end = float(segment["end"])
+                text = str(segment["text"]).strip()
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"Invalid segment {index} in {transcript_path}") from exc
+            if not math.isfinite(start) or not math.isfinite(end) or end < start:
+                raise ValueError(f"Invalid segment times at index {index} in {transcript_path}")
+            global_start = start + offset
+            global_end = end + offset
+            if not math.isfinite(global_start) or not math.isfinite(global_end):
+                raise ValueError(f"Rebased segment times overflow at index {index} in {transcript_path}")
+            if text:
+                segments.append({
+                    "start": round(global_start, 6),
+                    "end": round(global_end, 6),
+                    "text": text,
+                    "chunk": chunk_name,
+                })
+        sources.append({"chunk": chunk_name, "transcript": transcript_path.name, "offset_seconds": offset})
+
+    segments.sort(key=lambda segment: (segment["start"], segment["end"], segment["chunk"]))
+    result = {
+        "meta": {
+            "source_file": manifest.get("source_file"),
+            "duration_seconds": manifest.get("duration_seconds"),
+            "timeline_origin": manifest.get("timeline_origin", "first_video_stream_start"),
+            "chunk_count": len(chunks),
+            "transcript_sources": sources,
+        },
+        "segments": segments,
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("x", encoding="utf-8") as output:
+        json.dump(result, output, ensure_ascii=False, indent=2)
+        output.write("\n")
+    return result
