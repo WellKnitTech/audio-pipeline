@@ -17,7 +17,7 @@ def probe_media(media_path: Path) -> Dict[str, Any]:
 
     cmd = [
         "ffprobe", "-v", "error", "-show_entries",
-        "format=duration,size:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels",
+        "format=duration,size:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels,start_time",
         "-of", "json", str(media_path),
     ]
     result = run_cmd(cmd, check=False)
@@ -38,6 +38,13 @@ def probe_media(media_path: Path) -> Dict[str, Any]:
     }
 
 
+def _stream_start_time(stream: Dict[str, Any]) -> float:
+    try:
+        return float(stream.get("start_time") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def prepare_video(video_path: Path, output_dir: Path, chunk_seconds: int = 600) -> Dict[str, Any]:
     if chunk_seconds <= 0:
         raise ValueError("chunk_seconds must be greater than zero")
@@ -48,10 +55,13 @@ def prepare_video(video_path: Path, output_dir: Path, chunk_seconds: int = 600) 
     if not source.is_file():
         raise ValueError(f"Video source is not a file: {source}")
     source_metadata = probe_media(source)
-    if not any(stream.get("codec_type") == "audio" for stream in source_metadata["streams"]):
+    audio_streams = [stream for stream in source_metadata["streams"] if stream.get("codec_type") == "audio"]
+    video_streams = [stream for stream in source_metadata["streams"] if stream.get("codec_type") == "video"]
+    if not audio_streams:
         raise ValueError(f"Video has no audio stream: {source}")
-    if not any(stream.get("codec_type") == "video" for stream in source_metadata["streams"]):
+    if not video_streams:
         raise ValueError(f"Input has no video stream: {source}")
+    audio_start_offset = _stream_start_time(audio_streams[0]) - _stream_start_time(video_streams[0])
 
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     temporary_dir = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
@@ -72,12 +82,12 @@ def prepare_video(video_path: Path, output_dir: Path, chunk_seconds: int = 600) 
         if result.returncode != 0:
             raise RuntimeError(f"ffmpeg audio extraction failed for {source}:\n{result.stdout}")
 
-        chunk_files = sorted(audio_dir.glob("chunk_*.wav"))
+        chunk_files = sorted(audio_dir.glob("chunk_*.wav"), key=lambda path: int(path.stem.rsplit("_", 1)[1]))
         if not chunk_files:
             raise RuntimeError(f"ffmpeg produced no audio chunks for {source}")
 
         chunks: List[Dict[str, Any]] = []
-        offset = 0.0
+        offset = audio_start_offset
         for chunk_path in chunk_files:
             chunk_metadata = probe_media(chunk_path)
             duration = chunk_metadata["duration_seconds"]
@@ -95,6 +105,8 @@ def prepare_video(video_path: Path, output_dir: Path, chunk_seconds: int = 600) 
             "source_file": str(source),
             "source_size_bytes": source_metadata["size_bytes"],
             "duration_seconds": source_metadata["duration_seconds"],
+            "timeline_origin": "first_video_stream_start",
+            "audio_start_offset_seconds": round(audio_start_offset, 6),
             "streams": source_metadata["streams"],
             "audio_format": {"codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
             "chunk_seconds_requested": chunk_seconds,

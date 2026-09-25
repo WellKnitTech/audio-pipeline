@@ -55,8 +55,9 @@ audio-pipeline run in_dir out_dir --dry-run
 ## Prepare a large video for transcription
 
 `video-prepare` probes a local video, leaves the source untouched, and extracts
-16 kHz mono PCM audio into bounded WAV chunks. The output directory must not
-already exist; a manifest records the source metadata and each chunk's offset.
+16 kHz mono PCM audio into bounded WAV chunks. The manifest records source
+metadata and chunk offsets relative to the first video frame, including any
+audio/video stream start-time difference.
 
 ```bash
 audio-pipeline video-prepare /path/to/event.mp4 /path/to/work/event --chunk-seconds 600
