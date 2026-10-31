@@ -1,0 +1,20 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=7fwHj0Qqkbs",
+  "review_status": "Candidate ranges; not all transitions have been human-auditioned. Recheck every boundary before publishing or treating clips as final.",
+  "cuts": [
+    {"label": "Song 01", "start_seconds": 272.34, "end_seconds": 395.64, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 02", "start_seconds": 460.98, "end_seconds": 726.60, "boundary_evidence": "Extended past choir clapping to sustained audience applause; adjusted after review"},
+    {"label": "Song 03", "start_seconds": 807.30, "end_seconds": 1178.52, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 04", "start_seconds": 1207.14, "end_seconds": 1593.72, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 05", "start_seconds": 1663.38, "end_seconds": 2025.72, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 06", "start_seconds": 2971.38, "end_seconds": 3264.36, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate; post-intermission"},
+    {"label": "Song 07", "start_seconds": 3352.50, "end_seconds": 3686.76, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 08", "start_seconds": 3728.58, "end_seconds": 4035.72, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 09", "start_seconds": 4109.46, "end_seconds": 4431.48, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 10", "start_seconds": 4462.50, "end_seconds": 4665.24, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 11", "start_seconds": 4701.54, "end_seconds": 4933.32, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 12", "start_seconds": 4989.54, "end_seconds": 5244.36, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 13", "start_seconds": 5306.34, "end_seconds": 5605.80, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"},
+    {"label": "Song 14", "start_seconds": 5641.86, "end_seconds": 5871.00, "boundary_evidence": "YAMNet choir onset and sustained applause onset; candidate"}
+  ]
+}

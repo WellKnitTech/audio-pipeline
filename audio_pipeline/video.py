@@ -17,7 +17,7 @@ def probe_media(media_path: Path) -> Dict[str, Any]:
 
     cmd = [
         "ffprobe", "-v", "error", "-show_entries",
-        "format=duration,size:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels,start_time",
+        "format=duration,size,start_time:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels,start_time,duration",
         "-of", "json", str(media_path),
     ]
     result = run_cmd(cmd, check=False)
@@ -26,13 +26,20 @@ def probe_media(media_path: Path) -> Dict[str, Any]:
     try:
         data = json.loads(result.stdout)
         duration = float(data["format"]["duration"])
+        try:
+            format_start_time = float(data.get("format", {}).get("start_time") or 0.0)
+        except (TypeError, ValueError):
+            format_start_time = 0.0
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"ffprobe returned invalid media metadata for {media_path}") from exc
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError(f"Media duration must be positive: {media_path}")
+    if not math.isfinite(format_start_time):
+        format_start_time = 0.0
 
     return {
         "duration_seconds": duration,
+        "format_start_time_seconds": format_start_time,
         "size_bytes": int(data.get("format", {}).get("size") or media_path.stat().st_size),
         "streams": data.get("streams", []),
     }
