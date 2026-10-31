@@ -1,0 +1,16 @@
+{
+  "cuts": [
+    {
+      "label": "Song 01",
+      "start_seconds": 10.0,
+      "end_seconds": 120.0,
+      "boundary_evidence": "Reviewed example; replace with source-specific timings"
+    },
+    {
+      "label": "Song 02",
+      "start_seconds": 125.0,
+      "end_seconds": 240.0,
+      "boundary_evidence": "Reviewed example; replace with source-specific timings"
+    }
+  ]
+}

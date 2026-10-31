@@ -207,6 +207,10 @@ marimo/_lsp/
 __marimo__/
 
 # Audio / media
+models/
+work/
+*.metadata.json
+events.csv
 *.m4a
 *.wav
 *.mp3

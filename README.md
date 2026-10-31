@@ -5,6 +5,7 @@ Single-command, resume-safe pipeline for:
 1) Enhancing room recordings (iPhone, back-of-room) using ffmpeg filters  
 2) Transcribing with faster-whisper (CPU-friendly with INT8)  
 3) Optional token-free diarization (speaker labels) using VAD + embeddings + clustering  
+4) Song-by-song concert video segmentation using reviewed cut ranges and YAMNet event candidates
 
 The pipeline now resolves a single configuration object from profile + optional config file + CLI overrides.
 
@@ -81,6 +82,79 @@ selection and video clip rendering remain follow-up work.
 
 Preparation and merging leave source inputs untouched and refuse to overwrite
 outputs.
+
+## Song-by-song concert segmentation
+
+The optional YAMNet workflow scans the full audio for candidate applause and
+vocal activity, but **does not auto-pick final cuts**. Review the event CSV and
+listen to ambiguous boundaries; choir clapping and cheering can look like an
+audience response. Put approved ranges in a JSON cut list based on
+`examples/song-cuts.template.json`. `examples/centennial-candidate-cuts.json`
+records the candidate times used for the source recording below; it is not a
+fully audited cut list (only Song 02 was adjusted after listening feedback).
+Review all boundaries before treating those ranges as final.
+
+Then acquire a source recording you have permission to download. For YouTube, inspect available formats first and avoid playlist expansion:
+
+```bash
+yt-dlp --no-playlist -F 'https://www.youtube.com/watch?v=VIDEO_ID'
+yt-dlp --no-playlist -f 'bv*[height<=1080]+ba/b[height<=1080]' \
+  --merge-output-format mp4 -o 'recording.%(ext)s' 'https://www.youtube.com/watch?v=VIDEO_ID'
+```
+
+Install the optional inference dependencies and FFmpeg:
+
+```bash
+pip install -e ".[song-segmentation]"
+# Install ffmpeg and ffprobe using your OS package manager.
+```
+
+YAMNet model files are third-party artifacts and are not included in this
+repository. This pinned Hugging Face revision matches the ONNX model used here;
+the checksum makes the download auditable. Check the model and AudioSet licensing
+terms before redistribution or commercial use.
+
+```bash
+mkdir -p models
+curl -L 'https://huggingface.co/jafet21/yamnetonnx/resolve/ebb48ac2fc8c587f8baa7ae7f9ba34b2ee55d8f3/yamnet.onnx' -o models/yamnet.onnx
+printf '%s  %s\n' '04e27fca08e7a3aea2630d1a63a51e6b437c803e0ff6e26399f80870ac251dda' 'models/yamnet.onnx' | sha256sum --check
+```
+
+Scan and review candidates:
+
+```bash
+audio-pipeline video-song-scan recording.mp4 models/yamnet.onnx work/events.csv
+```
+
+The scanner writes per-frame YAMNet class scores to CSV and writes a companion
+`.metadata.json` with source/model SHA-256 hashes, Python/NumPy/ONNX Runtime/FFmpeg
+versions, class IDs, scan settings, stream start offset, and candidate spans.
+Times use the first video stream as zero, matching the render command; chunks are
+aligned to the model's 0.48-second frame grid and retain overlap at boundaries.
+Its defaults suppress clapping while singing/choir scores remain high. These are
+navigation aids, not authoritative boundaries.
+
+Create a reviewed cut list and render it. Range times are seconds relative to the
+first video frame (the same origin as scanner output); keep entries ordered and
+non-overlapping. Gaps are allowed (for example, an intermission). The renderer
+preserves aspect ratio, fades the final 3 seconds of audio, targets a conservative
+per-clip size, full-decodes each output, and refuses to overwrite files/directories.
+
+```bash
+audio-pipeline video-song-render recording.mp4 cuts.json output/songs \
+  --height 720 --max-size-mib 95 --cardwire-gpu 1
+```
+
+`--cardwire-gpu ID` wraps FFmpeg with `cardwire launch --gpu ID`, useful in
+Cardwire Smart mode; find the ID with `cardwire list`. NVIDIA NVENC is the
+renderer default. If unavailable, explicitly choose `--encoder libx264`; software
+encoding is never selected silently. Each run writes a `manifest.json` with
+source, source hash, cut times, Python/FFmpeg versions, encoder, preset, size,
+bitrate, fade, and boundary notes. The source video and audio are never modified.
+
+The renderer checks each final file against the size target and fails rather than
+leaving an oversized export. Lower `--max-size-mib` or split a long cut if the
+destination has a stricter attachment cap.
 
 ## Feature toggles
 Enable/disable stages cleanly:

@@ -11,6 +11,18 @@ from audio_pipeline import video
 
 
 class VideoPreparationTests(unittest.TestCase):
+    def test_probe_media_returns_format_and_stream_start_times(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "offset.mp4"
+            source.write_bytes(b"video")
+            payload = {"format": {"duration": "6.0", "size": "5", "start_time": "0.0"},
+                       "streams": [{"codec_type": "video", "start_time": "1.0", "duration": "5.0"}]}
+            with patch.object(video, "run_cmd", return_value=subprocess.CompletedProcess([], 0, json.dumps(payload))):
+                result = video.probe_media(source)
+            self.assertEqual(result["format_start_time_seconds"], 0.0)
+            self.assertEqual(result["streams"][0]["start_time"], "1.0")
+            self.assertEqual(result["streams"][0]["duration"], "5.0")
+
     def test_extracts_bounded_audio_chunks_and_writes_timeline_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -8,6 +8,7 @@ from pathlib import Path
 from .config_loader import config_pretty_json, resolve_config
 from .profiles import PROFILES
 from .video import merge_chunk_transcripts, prepare_video
+from .song_segmentation import render_song_cuts, scan_video_events
 
 
 def main() -> int:
@@ -56,6 +57,28 @@ def main() -> int:
     mergep.add_argument("manifest", type=Path, help="video-prepare manifest.json")
     mergep.add_argument("transcript_dir", type=Path, help="Directory containing per-chunk transcript JSON files")
     mergep.add_argument("output_json", type=Path, help="New output JSON path for the merged transcript")
+
+    scanp = sub.add_parser("video-song-scan", help="Scan a concert soundtrack for candidate applause/song events")
+    scanp.add_argument("video_path", type=Path, help="Source video; never modified")
+    scanp.add_argument("model_path", type=Path, help="YAMNet ONNX model file")
+    scanp.add_argument("output_csv", type=Path, help="New CSV path for per-frame event scores")
+    scanp.add_argument("--chunk-seconds", type=int, default=30, help="Inference chunk target; aligned upward to the YAMNet frame hop")
+    scanp.add_argument("--threshold", type=float, default=0.18, help="Crowd-response score threshold")
+    scanp.add_argument("--merge-gap", type=float, default=3.0, help="Merge candidate frames separated by at most this many seconds")
+    scanp.add_argument("--min-duration", type=float, default=1.5, help="Minimum candidate applause duration")
+    scanp.add_argument("--vocal-ceiling", type=float, default=0.25, help="Exclude frames with singing/choir score at or above this value")
+
+    renderp = sub.add_parser("video-song-render", help="Render reviewed song ranges from a JSON cue sheet")
+    renderp.add_argument("video_path", type=Path, help="Source video; never modified")
+    renderp.add_argument("cut_list", type=Path, help="JSON object with a 'cuts' array or a cut array")
+    renderp.add_argument("output_dir", type=Path, help="New output directory for clips and manifest")
+    renderp.add_argument("--height", type=int, default=720, help="Output height (default: 720; aspect ratio preserved)")
+    renderp.add_argument("--max-size-mib", type=float, default=95.0, help="Maximum file size per clip (default: 95 MiB)")
+    renderp.add_argument("--fade-seconds", type=float, default=3.0, help="Audio fade length at each clip end")
+    renderp.add_argument("--encoder", default="h264_nvenc", help="FFmpeg video encoder (default: h264_nvenc)")
+    renderp.add_argument("--preset", help="Encoder preset (default: p5 for NVENC, medium otherwise)")
+    renderp.add_argument("--cardwire-gpu", help="GPU ID to pass to 'cardwire launch --gpu' (for Cardwire Smart mode)")
+    renderp.add_argument("--audio-bitrate", type=int, default=128_000, help="AAC audio bitrate in bits/second")
 
     args = ap.parse_args()
 
@@ -151,6 +174,39 @@ def main() -> int:
             "chunks": result["meta"]["chunk_count"],
             "segments": len(result["segments"]),
         }, indent=2))
+        return 0
+
+    if args.cmd == "video-song-scan":
+        try:
+            metadata = scan_video_events(
+                args.video_path, args.model_path, args.output_csv,
+                chunk_seconds=args.chunk_seconds, threshold=args.threshold, merge_gap_seconds=args.merge_gap,
+                min_duration_seconds=args.min_duration, vocal_ceiling=args.vocal_ceiling,
+            )
+        except (FileNotFoundError, FileExistsError, ValueError, RuntimeError, OSError) as exc:
+            ap.error(str(exc))
+        print(json.dumps({"output_csv": str(args.output_csv),
+                          "metadata": str(args.output_csv.with_suffix('.metadata.json')),
+                          "frames": metadata["frame_count"],
+                          "candidate_applause_spans": metadata["candidate_applause_spans"]}, indent=2))
+        return 0
+
+    if args.cmd == "video-song-render":
+        try:
+            data = json.loads(args.cut_list.read_text(encoding="utf-8"))
+            cuts = data.get("cuts") if isinstance(data, dict) else data
+            if not isinstance(cuts, list):
+                raise ValueError("cut list JSON must be an array or an object with a 'cuts' array")
+            manifest = render_song_cuts(
+                args.video_path, cuts, args.output_dir, height=args.height,
+                max_size_mib=args.max_size_mib, fade_seconds=args.fade_seconds,
+                encoder=args.encoder, preset=args.preset, cardwire_gpu=args.cardwire_gpu,
+                audio_bitrate=args.audio_bitrate,
+            )
+        except (FileNotFoundError, FileExistsError, ValueError, RuntimeError, OSError, json.JSONDecodeError) as exc:
+            ap.error(str(exc))
+        print(json.dumps({"output_dir": str(args.output_dir), "clips": len(manifest["clips"]),
+                          "manifest": str(args.output_dir / "manifest.json")}, indent=2))
         return 0
 
     return 2

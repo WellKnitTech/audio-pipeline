@@ -24,6 +24,10 @@ diarization = [
   "webrtcvad>=2.0.10",
   "resemblyzer>=0.1.4",
 ]
+song-segmentation = [
+  "numpy>=1.23",
+  "onnxruntime>=1.17",
+]
 
 [project.scripts]
 audio-pipeline = "audio_pipeline.cli:main"
