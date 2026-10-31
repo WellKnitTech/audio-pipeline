@@ -98,7 +98,7 @@ Then acquire a source recording you have permission to download. For YouTube, in
 
 ```bash
 yt-dlp --no-playlist -F 'https://www.youtube.com/watch?v=VIDEO_ID'
-yt-dlp --no-playlist -f 'bv*[height<=1080]+ba/b[height<=1080]' \\
+yt-dlp --no-playlist -f 'bv*[height<=1080]+ba/b[height<=1080]' \
   --merge-output-format mp4 -o 'recording.%(ext)s' 'https://www.youtube.com/watch?v=VIDEO_ID'
 ```
 
@@ -141,7 +141,7 @@ preserves aspect ratio, fades the final 3 seconds of audio, targets a conservati
 per-clip size, full-decodes each output, and refuses to overwrite files/directories.
 
 ```bash
-audio-pipeline video-song-render recording.mp4 cuts.json output/songs \\
+audio-pipeline video-song-render recording.mp4 cuts.json output/songs \
   --height 720 --max-size-mib 95 --cardwire-gpu 1
 ```
 
